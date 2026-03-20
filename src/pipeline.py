@@ -11,14 +11,6 @@ DELIVERY_COLS = [
     "express_surcharge_pct",
 ]
 
-WAREHOUSE_RELIABILITY = {
-    "W1": 0.96,
-    "W2": 0.93,
-    "W3": 0.95,
-    "W4": 0.91,
-    "W5": 0.97,
-}
-
 
 def load_data(base_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     data_dir = base_dir / "data"
@@ -108,11 +100,6 @@ def build_warehouse_options(
     distances_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """Score every warehouse option for each store-product shortage."""
-    warehouse_metrics_df = warehouses_df.copy()
-    warehouse_metrics_df["reliability_score"] = warehouse_metrics_df["warehouse"].map(
-        WAREHOUSE_RELIABILITY
-    )
-
     options_df = (
         plan_df[
             [
@@ -125,7 +112,7 @@ def build_warehouse_options(
             ]
         ]
         .merge(distances_df, on="store", how="left")
-        .merge(warehouse_metrics_df, on=["warehouse", "product"], how="left")
+        .merge(warehouses_df, on=["warehouse", "product"], how="left")
     )
 
     options_df["recommended_order_qty"] = options_df[["shortage", "min_order_qty"]].max(axis=1)
