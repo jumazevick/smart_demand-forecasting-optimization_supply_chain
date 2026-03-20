@@ -60,7 +60,7 @@ def main():
     c1.metric("Stores", df["store"].nunique())
     c2.metric("Products", df["product"].nunique())
     c3.metric("Shortages", int((df["shortage"] > 0).sum()))
-    c4.metric("Total Transport Cost", f"${df['transport_cost'].sum():,.0f}")
+    c4.metric("Total Delivery Cost", f"${df['delivery_cost'].sum():,.0f}")
 
     st.divider()
 
@@ -94,9 +94,9 @@ def main():
         st.bar_chart(stock_vs_demand)
 
     with col_right2:
-        st.subheader("Transport Cost by Warehouse")
+        st.subheader("Delivery Cost by Warehouse")
         by_wh = (
-            df.groupby("warehouse")["transport_cost"]
+            df.groupby("warehouse")["delivery_cost"]
             .sum()
             .sort_values(ascending=False)
         )

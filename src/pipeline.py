@@ -35,25 +35,37 @@ def plan_inventory(forecast_df: pd.DataFrame, warehouses_df: pd.DataFrame) -> pd
     return plan_df
 
 
+DELIVERY_COLS = ["base_handling_fee", "cost_per_km", "weight_kg_per_unit", "min_order_qty", "express_surcharge_pct"]
+
+
 def assign_best_warehouse(plan_df: pd.DataFrame, warehouses_df: pd.DataFrame, distances_df: pd.DataFrame) -> pd.DataFrame:
     """Assign each store-product to closest warehouse that has stock for that product."""
-    # Merge distances with warehouse stock info
+    # Merge distances with warehouse stock and delivery pricing info
     wh_distances = distances_df.merge(warehouses_df, on="warehouse", how="left")
-    
+
     # For each store-product, find closest warehouse with that product
     def get_best_warehouse(row):
         store = row["store"]
         product = row["product"]
         options = wh_distances[(wh_distances["store"] == store) & (wh_distances["product"] == product)]
         if options.empty:
-            return None, None
+            return pd.Series([None, None] + [None] * len(DELIVERY_COLS))
         best = options.sort_values("distance_km").iloc[0]
-        return best["warehouse"], best["distance_km"]
-    
-    plan_df[["warehouse", "distance_km"]] = plan_df.apply(get_best_warehouse, axis=1, result_type="expand")
-    
+        return pd.Series([best["warehouse"], best["distance_km"]] + [best[c] for c in DELIVERY_COLS])
+
+    plan_df[["warehouse", "distance_km"] + DELIVERY_COLS] = plan_df.apply(
+        get_best_warehouse, axis=1, result_type="expand"
+    )
+
     plan_df["ship_qty"] = plan_df["shortage"].round(2)
-    plan_df["transport_cost"] = (plan_df["ship_qty"] * plan_df["distance_km"]).round(2)
+
+    # Amazon-style delivery cost:
+    #   base_handling_fee  (fixed: picking, packing, labelling per shipment)
+    # + weight_kg_per_unit × ship_qty × cost_per_km × distance_km  (variable: weight × distance)
+    # Only charged when there is an actual shipment (ship_qty > 0)
+    has_shipment = plan_df["ship_qty"] > 0
+    variable = plan_df["weight_kg_per_unit"] * plan_df["ship_qty"] * plan_df["cost_per_km"] * plan_df["distance_km"]
+    plan_df["delivery_cost"] = ((plan_df["base_handling_fee"] * has_shipment) + variable).round(2)
     return plan_df
 
 
@@ -73,7 +85,7 @@ def run_pipeline() -> pd.DataFrame:
     print(f"\nProcessed {len(output_df)} store-product combinations")
     print(f"From {len(sales_df)} historical sales records")
     print(f"\nShortages identified: {len(output_df[output_df['status'] == 'shortage'])}")
-    print(f"Total transport cost: ${output_df['transport_cost'].sum():,.2f}")
+    print(f"Total delivery cost: ${output_df['delivery_cost'].sum():,.2f}")
     print(f"\nOutput preview:")
     print(output_df.head(10))
     return output_df
